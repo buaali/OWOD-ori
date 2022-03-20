@@ -1,0 +1,8 @@
+.py[cod]
+.pth*
+.pkl*
+.rar
+.zip
+.tar
+.tar.gz
+datasets/VOC2007/
