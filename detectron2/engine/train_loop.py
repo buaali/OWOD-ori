@@ -299,6 +299,18 @@ class SimpleTrainer(TrainerBase):
         self._data_loader_iter = iter(data_loader)
         self.optimizer = optimizer
 
+    def before_train(self):
+        import pdb
+        #pdb.set_trace()
+        super().before_train()
+
+    def after_train(self):
+        logger = logging.getLogger(__name__)
+        logger.info("Going to save the ukn_boxes_and_ratio files...")
+        torch.save(self.model.roi_heads.d, './output/save_ukn_boxes_and_ratio.pth')
+        super().after_train()
+
+
     def run_step(self):
         """
         Implement the standard training logic described above.

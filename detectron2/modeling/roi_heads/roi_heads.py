@@ -380,6 +380,7 @@ class Res5ROIHeads(ROIHeads):
         super().__init__(cfg)
 
         # fmt: off
+        self.d = {}
         self.in_features  = cfg.MODEL.ROI_HEADS.IN_FEATURES
         pooler_resolution = cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
         pooler_type       = cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE
@@ -444,7 +445,7 @@ class Res5ROIHeads(ROIHeads):
     def log_features(self, features, proposals):
         gt_classes = torch.cat([p.gt_classes for p in proposals])
         data = (features, gt_classes)
-        location = '/home/fk1/workspace/OWOD/output/features/' + shortuuid.uuid() + '.pkl'
+        location = './output/features/' + shortuuid.uuid() + '.pkl'
         torch.save(data, location)
 
     def compute_energy(self, predictions, proposals):
@@ -454,16 +455,34 @@ class Res5ROIHeads(ROIHeads):
         location = os.path.join(self.energy_save_path, shortuuid.uuid() + '.pkl')
         torch.save(data, location)
 
-    def forward(self, images, features, proposals, targets=None):
+    def save_ukn_boxes_and_ratio(
+        self,
+        images_id,
+        proposals: List[Instances],
+    ):
+        import pdb
+        #pdb.set_trace()
+        for id in range(len(images_id)):
+            self.d[images_id[id]] = {}
+            p = proposals[id]
+            self.d[images_id[id]]['boxes_of_uknown'] = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] == self.num_classes - 1]
+            self.d[images_id[id]]['ratio_of_unknown_proposals'] = int(len(self.d[images_id[id]]['boxes_of_uknown']) / len(p))
+        
+
+
+    def forward(self, images_id, images, features, proposals, targets=None):
         """
         See :meth:`ROIHeads.forward`.
         """
-        del images
+        
 
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
         del targets
+
+        self.save_ukn_boxes_and_ratio(images_id, proposals)
+        del images
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
         box_features = self._shared_roi_transform(
@@ -714,6 +733,16 @@ class StandardROIHeads(ROIHeads):
         ret["keypoint_head"] = build_keypoint_head(cfg, shape)
         return ret
 
+    def save_ukn_boxes_and_ratio(
+        self,
+        images: ImageList,
+        proposals: List[Instances],
+    ):
+        import pdb
+        pdb.set_trace()
+
+
+
     def forward(
         self,
         images: ImageList,
@@ -724,11 +753,13 @@ class StandardROIHeads(ROIHeads):
         """
         See :class:`ROIHeads.forward`.
         """
-        del images
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
         del targets
+
+        self.save_ukn_boxes_and_ratio(images, proposals)
+        del images
 
         if self.training:
             losses = self._forward_box(features, proposals)
