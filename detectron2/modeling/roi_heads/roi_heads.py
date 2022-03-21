@@ -479,9 +479,10 @@ class Res5ROIHeads(ROIHeads):
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
+            self.save_ukn_boxes_and_ratio(images_id, proposals)
         del targets
 
-        self.save_ukn_boxes_and_ratio(images_id, proposals)
+        
         del images
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
