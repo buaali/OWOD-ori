@@ -150,6 +150,12 @@ class TrainerBase:
                 # tell whether the training successfully finished or failed
                 # due to exceptions.
                 self.iter += 1
+                '''
+                if (self.iter - start_iter) % 10000 == 0:
+                    logger = logging.getLogger(__name__)
+                    logger.info("Going to save the ukn_boxes_and_ratio files...")
+                    torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
+                '''
             except Exception:
                 logger.exception("Exception during training:")
                 raise
@@ -305,11 +311,51 @@ class SimpleTrainer(TrainerBase):
         super().before_train()
 
     def after_train(self):
-        logger = logging.getLogger(__name__)
-        logger.info("Going to save the ukn_boxes_and_ratio files...")
-        torch.save(self.model.roi_heads.d, './output/save_ukn_boxes_and_ratio.pth')
+        if not os.path.exists("./output/t2/save_ukn_boxes_and_ratio_final.pth"):
+            logger = logging.getLogger(__name__)
+            logger.info("Going to save the ukn_boxes_and_ratio files...")
+            torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_final.pth')
+        else:
+            old_d = torch.load("./output/t2/save_ukn_boxes_and_ratio_final.pth")
+            if not old_d and self.model.roi_heads.d:
+                logger = logging.getLogger(__name__)
+                logger.info("Going to save the ukn_boxes_and_ratio files...")
+                torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_final.pth')
         super().after_train()
 
+    def train(self, start_iter: int, max_iter: int):
+        """
+        Args:
+            start_iter, max_iter (int): See docs above
+        """
+        logger = logging.getLogger(__name__)
+        logger.info("Starting training from iteration {}".format(start_iter))
+
+        self.iter = self.start_iter = start_iter
+        self.max_iter = max_iter
+
+        with EventStorage(start_iter) as self.storage:
+            try:
+                self.before_train()
+                for self.iter in range(start_iter, max_iter):
+                    if self.cfg.OWOD.SKIP_TRAINING_WHILE_EVAL:
+                        continue
+                    self.before_step()
+                    self.run_step()
+                    self.after_step()
+                # self.iter == max_iter can be used by `after_train` to
+                # tell whether the training successfully finished or failed
+                # due to exceptions.
+                self.iter += 1
+                if (self.iter - start_iter) % 10000 == 0:
+                    logger = logging.getLogger(__name__)
+                    logger.info("Going to save the ukn_boxes_and_ratio files...")
+                    torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
+            except Exception:
+                logger.exception("Exception during training:")
+                raise
+            finally:
+                self.after_train()
 
     def run_step(self):
         """

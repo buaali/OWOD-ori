@@ -241,6 +241,8 @@ def get_detection_dataset_dicts(
 
     d_name = dataset_names[0]
     # if 'voc_coco' in d_name:
+    import pdb
+    #pdb.set_trace()
     if 'train' in d_name:
         dataset_dicts = remove_prev_class_and_unk_instances(cfg, dataset_dicts)
     elif 'test' in d_name:
@@ -275,6 +277,9 @@ def remove_prev_class_and_unk_instances(cfg, dataset_dicts):
         annos = entry["annotations"]
         for annotation in copy.copy(annos):
             if annotation["category_id"] not in valid_classes:
+                #if annotation["category_id"] > 39:
+                    #import pdb
+                    #pdb.set_trace()
                 annos.remove(annotation)
         if len(annos) == 0:
             dataset_dicts.remove(entry)
@@ -314,10 +319,14 @@ def label_known_class_and_unknown(cfg, dataset_dicts):
     logger.info("Known classes: " + str(known_classes))
     logger.info("Labelling known instances the corresponding label, and unknown instances as unknown...")
 
+    import pdb
+    #pdb.set_trace()
     for entry in dataset_dicts:
         annos = entry["annotations"]
         for annotation in annos:
             if annotation["category_id"] not in known_classes:
+                import pdb
+                pdb.set_trace()
                 annotation["category_id"] = total_num_class - 1
 
     return dataset_dicts

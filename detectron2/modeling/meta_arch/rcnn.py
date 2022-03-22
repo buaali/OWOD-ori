@@ -166,7 +166,7 @@ class GeneralizedRCNN(nn.Module):
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
 
-        _, detector_losses = self.roi_heads(images_id, images, features, proposals, gt_instances)
+        _, detector_losses = self.roi_heads(images, features, proposals, gt_instances, images_id)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
@@ -195,9 +195,13 @@ class GeneralizedRCNN(nn.Module):
             same as in :meth:`forward`.
         """
         assert not self.training
-
+        import pdb
+        #pdb.set_trace()
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
+        images_id = [x['image_id'] for x in batched_inputs]
+        if "instances" in batched_inputs[0]:
+            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
 
         if detected_instances is None:
             if self.proposal_generator:
@@ -206,7 +210,10 @@ class GeneralizedRCNN(nn.Module):
                 assert "proposals" in batched_inputs[0]
                 proposals = [x["proposals"].to(self.device) for x in batched_inputs]
 
-            results, _ = self.roi_heads(images, features, proposals, None)
+            import pdb
+            #pdb.set_trace()
+
+            results, _ = self.roi_heads(images, features, proposals, gt_instances, images_id=images_id)
         else:
             detected_instances = [x.to(self.device) for x in detected_instances]
             results = self.roi_heads.forward_with_given_boxes(features, detected_instances)

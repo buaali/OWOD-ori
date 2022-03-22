@@ -5,6 +5,7 @@ import time
 from collections import OrderedDict
 from contextlib import contextmanager
 import torch
+import os
 
 from detectron2.utils.comm import get_world_size, is_main_process
 from detectron2.utils.logger import log_every_n_seconds
@@ -123,6 +124,7 @@ def inference_on_dataset(model, data_loader, evaluator):
     logger.info("Start inference on {} images".format(len(data_loader)))
 
     total = len(data_loader)  # inference data loader must have a fixed length
+    
     if evaluator is None:
         # create a no-op evaluator
         evaluator = DatasetEvaluators([])
@@ -133,6 +135,8 @@ def inference_on_dataset(model, data_loader, evaluator):
     total_compute_time = 0
     with inference_context(model), torch.no_grad():
         for idx, inputs in enumerate(data_loader):
+            import pdb
+            #pdb.set_trace()
             if idx == num_warmup:
                 start_time = time.perf_counter()
                 total_compute_time = 0
@@ -172,6 +176,17 @@ def inference_on_dataset(model, data_loader, evaluator):
             total_compute_time_str, total_compute_time / (total - num_warmup), num_devices
         )
     )
+
+    if not os.path.exists("./output/t2/save_ukn_labels.pth"):
+        logger = logging.getLogger(__name__)
+        logger.info("Going to save the save_ukn_labels files...")
+        torch.save(model.roi_heads.unkown_labels, './output/t2/save_ukn_labels.pth')
+    else:
+        old_d = torch.load("./output/t2/save_ukn_labels.pth")
+        if not old_d and model.roi_heads.unkown_labels:
+            logger = logging.getLogger(__name__)
+            logger.info("Going to save the save_ukn_labels files...")
+            torch.save(model.roi_heads.unkown_labels, './output/t2/save_ukn_labels.pth')
 
     results = evaluator.evaluate()
     # An evaluator may return None when not in main process.

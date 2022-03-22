@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import inspect
 import logging
+from tkinter.messagebox import NO
 import numpy as np
 import heapq
 import os
@@ -381,6 +382,10 @@ class Res5ROIHeads(ROIHeads):
 
         # fmt: off
         self.d = {}
+        self.unkown_boxes = None
+        self.unkown_labels = {}
+        if os.path.exists("./output/t2/save_ukn_boxes_and_ratio_final.pth"):
+            self.unkown_boxes = torch.load("./output/t2/save_ukn_boxes_and_ratio_final.pth")
         self.in_features  = cfg.MODEL.ROI_HEADS.IN_FEATURES
         pooler_resolution = cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
         pooler_type       = cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE
@@ -465,22 +470,45 @@ class Res5ROIHeads(ROIHeads):
         for id in range(len(images_id)):
             self.d[images_id[id]] = {}
             p = proposals[id]
-            self.d[images_id[id]]['boxes_of_uknown'] = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] == self.num_classes - 1]
-            self.d[images_id[id]]['ratio_of_unknown_proposals'] = int(len(self.d[images_id[id]]['boxes_of_uknown']) / len(p))
+            self.d[images_id[id]]['boxes_of_unknown'] = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] == self.num_classes - 1]
+            known_proposals = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] < 40]
+            self.d[images_id[id]]['ratio_of_known_proposals'] = float(len(known_proposals) / len(p))
+
+    def eval_unkown(
+        self,
+        images_id,
+        targets,
+    ):
+        import pdb
+        #pdb.set_trace()
+        assert self.unkown_boxes
+        cur_boxes = []
+        for id in images_id:
+            cur_boxes = self.unkown_boxes[id]['boxes_of_unknown']
+        for targets_per_image, cur_box in zip(targets, cur_boxes):
+            match_quality_matrix = pairwise_iou(
+                targets_per_image.gt_boxes, cur_box
+            )
+            matched_idxs, matched_labels = self.proposal_matcher(match_quality_matrix)
+            self.unkown_labels[id] = {}
+            self.unkown_labels[id]['label'] = int(targets_per_image.gt_classes[matched_idxs])
+            self.unkown_labels[id]['iou'] = float(match_quality_matrix[matched_idxs])
+            import pdb
+            #pdb.set_trace()
+
         
 
 
-    def forward(self, images_id, images, features, proposals, targets=None):
+    def forward(self, images, features, proposals, targets=None, images_id=None):
         """
         See :meth:`ROIHeads.forward`.
         """
-        
-
         if self.training:
             assert targets
+            assert images_id
             proposals = self.label_and_sample_proposals(proposals, targets)
             self.save_ukn_boxes_and_ratio(images_id, proposals)
-        del targets
+        #del targets
 
         
         del images
@@ -513,6 +541,7 @@ class Res5ROIHeads(ROIHeads):
                 losses.update(self.mask_head(mask_features, proposals))
             return [], losses
         else:
+            self.eval_unkown(images_id, targets)
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
