@@ -326,7 +326,7 @@ def label_known_class_and_unknown(cfg, dataset_dicts):
         for annotation in annos:
             if annotation["category_id"] not in known_classes:
                 import pdb
-                pdb.set_trace()
+                #pdb.set_trace()
                 annotation["category_id"] = total_num_class - 1
 
     return dataset_dicts

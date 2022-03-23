@@ -343,14 +343,15 @@ class SimpleTrainer(TrainerBase):
                     self.before_step()
                     self.run_step()
                     self.after_step()
+                    if (self.iter - start_iter) % 10000 == 0:
+                        logger = logging.getLogger(__name__)
+                        logger.info("Going to save the ukn_boxes_and_ratio files...")
+                        torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
                 # self.iter == max_iter can be used by `after_train` to
                 # tell whether the training successfully finished or failed
                 # due to exceptions.
                 self.iter += 1
-                if (self.iter - start_iter) % 10000 == 0:
-                    logger = logging.getLogger(__name__)
-                    logger.info("Going to save the ukn_boxes_and_ratio files...")
-                    torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
+
             except Exception:
                 logger.exception("Exception during training:")
                 raise
