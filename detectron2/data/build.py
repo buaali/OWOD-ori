@@ -246,7 +246,9 @@ def get_detection_dataset_dicts(
     if 'train' in d_name:
         dataset_dicts = remove_prev_class_and_unk_instances(cfg, dataset_dicts)
     elif 'test' in d_name:
-        dataset_dicts = label_known_class_and_unknown(cfg, dataset_dicts)
+        #dataset_dicts = remove_prev_class_and_unk_instances(cfg, dataset_dicts)
+        # dataset_dicts = label_known_class_and_unknown(cfg, dataset_dicts)
+        dataset_dicts = dataset_dicts
     elif 'val' in d_name:
         dataset_dicts = label_known_class_and_unknown(cfg, dataset_dicts)
     elif 'ft' in d_name:
@@ -326,7 +328,7 @@ def label_known_class_and_unknown(cfg, dataset_dicts):
         for annotation in annos:
             if annotation["category_id"] not in known_classes:
                 import pdb
-                #pdb.set_trace()
+                # pdb.set_trace()
                 annotation["category_id"] = total_num_class - 1
 
     return dataset_dicts

@@ -746,27 +746,6 @@ class FastRCNNOutputLayers(nn.Module):
         num_prop_per_image = [len(p) for p in proposals]
         return predict_boxes.split(num_prop_per_image)
 
-    def unknown_inference(self, predictions, proposals):
-        boxes = self.predict_boxes(predictions, proposals)
-        scores = self.predict_probs(predictions, proposals)
-        image_shapes = [x.image_size for x in proposals]
-        logits = self.predict_logits(predictions, proposals)
-        return fast_rcnn_inference_unknown(
-            boxes,
-            scores,
-            image_shapes,
-            # predictions,
-            logits,
-            self.test_score_thresh,
-            self.test_nms_thresh,
-            self.test_topk_per_image,
-        )
-
-    def predict_logits(self, predictions, proposals):
-        logits, _ = predictions
-        num_inst_per_image = [len(p) for p in proposals]
-        return logits.split(num_inst_per_image, dim=0)
-
     def predict_boxes(self, predictions, proposals):
         """
         Args:
@@ -874,62 +853,3 @@ class FastRCNNOutputLayers(nn.Module):
     #                     loss += F.mse_loss(feature, mu)
     #
     #     return loss
-
-def fast_rcnn_inference_unknown(boxes, scores, image_shapes, predictions, score_thresh, nms_thresh, topk_per_image):
-    result_per_image = [
-        fast_rcnn_inference_single_image_unknown(
-            boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image, prediction
-        )
-        for scores_per_image, boxes_per_image, image_shape, prediction in zip(scores, boxes, image_shapes, predictions)
-    ]
-    return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
-
-def fast_rcnn_inference_single_image_unknown(
-    boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image, prediction
-):
-    logits = prediction
-    valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
-    if not valid_mask.all():
-        boxes = boxes[valid_mask]
-        scores = scores[valid_mask]
-        logits = logits[valid_mask]
-    ids = nonzero_tuple(valid_mask)[0]
-
-    scores = scores[:, :-1]
-    logits = logits[:, :-1]
-    num_bbox_reg_classes = boxes.shape[1] // 4
-    # Convert to Boxes to use the `clip` function ...
-    boxes = Boxes(boxes.reshape(-1, 4))
-    boxes.clip(image_shape)
-    boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
-
-    # 1. Filter results based on detection scores. It can make NMS more efficient
-    #    by filtering out low-confidence detections.
-    filter_mask = scores > 0  # R x K
-    # print(score_thresh)
-    # R' x 2. First column contains indices of the R predictions;
-    # Second column contains indices of classes.
-    filter_inds = filter_mask.nonzero()
-    if num_bbox_reg_classes == 1:
-        boxes = boxes[filter_inds[:, 0], 0]
-    else:
-        boxes = boxes[filter_mask]
-    scores = scores[filter_mask]
-    logits = logits[filter_inds[:,0]]
-    ids = ids[filter_inds[:,0]]
-
-    # 2. Apply NMS for each class independently.
-    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
-    if topk_per_image >= 0:
-        keep = keep[:topk_per_image]
-    boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
-    logits = logits[keep]
-    ids = ids[keep]
-
-    result = Instances(image_shape)
-    result.pred_boxes = Boxes(boxes)
-    result.scores = scores
-    result.pred_classes = filter_inds[:, 1]
-    result.logits = logits
-    result.ids = ids
-    return result, filter_inds[:, 0]

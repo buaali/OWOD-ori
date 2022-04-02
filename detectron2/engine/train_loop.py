@@ -154,7 +154,7 @@ class TrainerBase:
                 if (self.iter - start_iter) % 10000 == 0:
                     logger = logging.getLogger(__name__)
                     logger.info("Going to save the ukn_boxes_and_ratio files...")
-                    torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
+                    torch.save(self.model.roi_heads.d, './output/t1/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
                 '''
             except Exception:
                 logger.exception("Exception during training:")
@@ -311,16 +311,16 @@ class SimpleTrainer(TrainerBase):
         super().before_train()
 
     def after_train(self):
-        if not os.path.exists("./output/t2/save_ukn_boxes_and_ratio_final.pth"):
+        if not os.path.exists("./output/t1/save_ukn_boxes_and_ratio_final.pth"):
             logger = logging.getLogger(__name__)
             logger.info("Going to save the ukn_boxes_and_ratio files...")
-            torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_final.pth')
+            torch.save(self.model.roi_heads.d, './output/t1/save_ukn_boxes_and_ratio_final.pth')
         else:
-            old_d = torch.load("./output/t2/save_ukn_boxes_and_ratio_final.pth")
+            old_d = torch.load("./output/t1/save_ukn_boxes_and_ratio_final.pth")
             if not old_d and self.model.roi_heads.d:
                 logger = logging.getLogger(__name__)
                 logger.info("Going to save the ukn_boxes_and_ratio files...")
-                torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_final.pth')
+                torch.save(self.model.roi_heads.d, './output/t1/save_ukn_boxes_and_ratio_final.pth')
         super().after_train()
 
     def train(self, start_iter: int, max_iter: int):
@@ -346,7 +346,7 @@ class SimpleTrainer(TrainerBase):
                     if (self.iter - start_iter) % 10000 == 0:
                         logger = logging.getLogger(__name__)
                         logger.info("Going to save the ukn_boxes_and_ratio files...")
-                        torch.save(self.model.roi_heads.d, './output/t2/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
+                        torch.save(self.model.roi_heads.d, './output/t1/save_ukn_boxes_and_ratio_step_{}.pth'.format(self.iter))
                 # self.iter == max_iter can be used by `after_train` to
                 # tell whether the training successfully finished or failed
                 # due to exceptions.

@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import inspect
 import logging
+from tkinter.messagebox import NO
 import numpy as np
 import heapq
 import os
@@ -10,10 +11,9 @@ import shortuuid
 from typing import Dict, List, Optional, Tuple, Union
 import torch
 from torch import nn
-import torch.nn.functional as F
 
 from detectron2.config import configurable
-from detectron2.layers import ShapeSpec, nonzero_tuple, cat, Linear
+from detectron2.layers import ShapeSpec, nonzero_tuple
 from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou
 from detectron2.utils.events import get_event_storage
 from detectron2.utils.registry import Registry
@@ -241,6 +241,8 @@ class ROIHeads(torch.nn.Module):
             for index in sorted_indices:
                 mask[index] = True
             gt_classes_ss[mask] = self.num_classes - 1
+            import pdb
+            #pdb.set_trace()
 
         return sampled_idxs, gt_classes_ss
 
@@ -326,9 +328,9 @@ class ROIHeads(torch.nn.Module):
             proposals_with_gt.append(proposals_per_image)
 
         # Log the number of fg/bg samples that are selected for training ROI heads
-        storage = get_event_storage()
-        storage.put_scalar("roi_head/num_fg_samples", np.mean(num_fg_samples))
-        storage.put_scalar("roi_head/num_bg_samples", np.mean(num_bg_samples))
+        #storage = get_event_storage()
+        #storage.put_scalar("roi_head/num_fg_samples", np.mean(num_fg_samples))
+        #storage.put_scalar("roi_head/num_bg_samples", np.mean(num_bg_samples))
 
         return proposals_with_gt
 
@@ -368,6 +370,7 @@ class ROIHeads(torch.nn.Module):
         """
         raise NotImplementedError()
 
+
 @ROI_HEADS_REGISTRY.register()
 class Res5ROIHeads(ROIHeads):
     """
@@ -380,6 +383,11 @@ class Res5ROIHeads(ROIHeads):
         super().__init__(cfg)
 
         # fmt: off
+        import pdb
+        
+        #print(self.enable_thresold_autolabelling)
+        #pdb.set_trace()
+        self.d = {}
         self.unkown_boxes = None
         self.unkown_labels = {}
         if os.path.exists("./output/t1/save_ukn_boxes_and_ratio_final.pth"):
@@ -408,8 +416,6 @@ class Res5ROIHeads(ROIHeads):
         self.box_predictor = FastRCNNOutputLayers(
             cfg, ShapeSpec(channels=out_channels, height=1, width=1)
         )
-
-        self.d = {}
 
         if self.mask_on:
             self.mask_head = build_mask_head(
@@ -450,7 +456,7 @@ class Res5ROIHeads(ROIHeads):
     def log_features(self, features, proposals):
         gt_classes = torch.cat([p.gt_classes for p in proposals])
         data = (features, gt_classes)
-        location = '/home/fk1/workspace/OWOD/output/features/' + shortuuid.uuid() + '.pkl'
+        location = './output/features/' + shortuuid.uuid() + '.pkl'
         torch.save(data, location)
 
     def compute_energy(self, predictions, proposals):
@@ -463,20 +469,17 @@ class Res5ROIHeads(ROIHeads):
     def save_ukn_boxes_and_ratio(
         self,
         images_id,
-        proposals,
+        proposals: List[Instances],
     ):
         import pdb
         #pdb.set_trace()
-        if not proposals:
-            return
         for id in range(len(images_id)):
             self.d[images_id[id]] = {}
+            p = proposals[id]
+            self.d[images_id[id]]['boxes_of_unknown'] = [p.proposal_boxes[i] for i in range(len(p)) if p.gt_classes[i] == self.num_classes - 1]
             #pdb.set_trace()
-            p_box = proposals[id]
-            self.d[images_id[id]]['boxes_of_unknown'] = p_box
-            # self.d[images_id[id]]['boxes_of_unknown'] = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] == self.num_classes - 1]
-            # known_proposals = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] < 40]
-            # self.d[images_id[id]]['ratio_of_known_proposals'] = float(len(known_proposals) / len(p))
+            known_proposals = [p.gt_boxes[i] for i in range(len(p)) if p.gt_classes[i] < 20]
+            self.d[images_id[id]]['ratio_of_known_proposals'] = float(len(known_proposals) / len(p))
 
     def eval_unkown(
         self,
@@ -492,8 +495,7 @@ class Res5ROIHeads(ROIHeads):
         for id in images_id:
             if id not in self.unkown_boxes.keys():
                 return
-            cur_boxes = [self.unkown_boxes[id]['boxes_of_unknown']]
-        #pdb.set_trace()
+            cur_boxes = self.unkown_boxes[id]['boxes_of_unknown']
         for targets_per_image, cur_box in zip(targets, cur_boxes):
             match_quality_matrix = pairwise_iou(
                 targets_per_image.gt_boxes, cur_box
@@ -503,17 +505,15 @@ class Res5ROIHeads(ROIHeads):
             # if (targets_per_image.gt_classes>20).any():
                 # pdb.set_trace()
             self.unkown_labels[id] = {}
-            #pdb.set_trace()
+
             for idx in range(len(match_quality_matrix)):
-                if (match_quality_matrix[idx] > 0).any():
+                if float(match_quality_matrix[idx]) > 0:
                     if 'label' not in self.unkown_labels[id]:
                         self.unkown_labels[id]['label'] = []
-                        self.unkown_labels[id]['pre_label'] = []
+                        self.unkown_labels[id]['iou'] = []
                     # pdb.set_trace()
                     self.unkown_labels[id]['label'].append(int(targets_per_image.gt_classes[idx]))
-                    for i in range(len(match_quality_matrix[idx])):
-                        if match_quality_matrix[idx][i] > 0:
-                            self.unkown_labels[id]['pre_label'].append(int(targets_per_image.gt_classes[idx]))
+                    self.unkown_labels[id]['iou'].append(float(match_quality_matrix[idx]))
             '''
             self.unkown_labels[id] = {}
             self.unkown_labels[id]['label'] = int(targets_per_image.gt_classes[matched_idxs])
@@ -521,18 +521,30 @@ class Res5ROIHeads(ROIHeads):
             import pdb
             '''
             #pdb.set_trace()
+            
+
+        
 
 
     def forward(self, images, features, proposals, targets=None, images_id=None):
         """
         See :meth:`ROIHeads.forward`.
         """
-        del images
-
         if self.training:
             assert targets
+            assert images_id
             proposals = self.label_and_sample_proposals(proposals, targets)
-        # del targets
+            import pdb
+            # pdb.set_trace()
+            self.save_ukn_boxes_and_ratio(images_id, proposals)
+        #del targets
+        #import pdb
+        #pdb.set_trace()
+        #proposals = self.label_and_sample_proposals(proposals, targets)
+        #pdb.set_trace()
+        #self.save_ukn_boxes_and_ratio(images_id, proposals)
+        
+        del images
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
         box_features = self._shared_roi_transform(
@@ -541,9 +553,6 @@ class Res5ROIHeads(ROIHeads):
         input_features = box_features.mean(dim=[2, 3])
         predictions = self.box_predictor(input_features)
 
-        # print(input_features)
-        # input()
-
         if self.training:
             # self.log_features(input_features, proposals)
             if self.enable_clustering:
@@ -551,20 +560,10 @@ class Res5ROIHeads(ROIHeads):
             del features
             if self.compute_energy_flag:
                 self.compute_energy(predictions, proposals)
-
-            # select hard unknown sample ，阈值调的严格一些
-            # RPN objectness大 但是roi不像已知类的
-            # 已知类和未知类样本不均衡的问题
-
-
-            # detection head loss
-            # losses = self.box_predictor.losses(predictions, proposals, input_features)
-            losses = self.box_predictor.losses(predictions, proposals, input_features, targets)
-            del targets
-
+            losses = self.box_predictor.losses(predictions, proposals, input_features)
             if self.mask_on:
                 proposals, fg_selection_masks = select_foreground_proposals(
-                    proposals, self.known_classes
+                    proposals, self.num_classes
                 )
                 # Since the ROI feature transform is shared between boxes and masks,
                 # we don't need to recompute features. The mask loss is only defined
@@ -575,83 +574,11 @@ class Res5ROIHeads(ROIHeads):
                 losses.update(self.mask_head(mask_features, proposals))
             return [], losses
         else:
-            # pred_instances, _ = self.box_predictor.inference(predictions, proposals)
-            # energy_score = self.log_sum_exp(predictions[0][:, :self.known_classes], 1)
-            # energy_score = self.log_sum_exp(predictions[0][:, :self.known_classes], 1)
-            # energy_output = self.logistic_regression(energy_score.view(-1, 1))
-            # print(energy_output)
-            # print(F.softmax(energy_output, dim=-1).argmax(dim=-1))
-            # print(energy_score.mean())
-            
-            # print(energy_output.mean(0))
-            # print(energy_score)
-            # input()
-            # print(self.logistic_regression.weight)
-            # print(self.logistic_regression.bias)
-            # print(self.weight_energy.weight)
-            # print(self.weight_energy.bias)
-            # input()
-
-            ################################## start #####################################
-
-            hard_unknown_topk = 200
-            assert targets
-            assert images_id
-
-            self.num_preds_per_image = [len(p) for p in proposals]
-            sum_prop = np.append(0, np.cumsum(self.num_preds_per_image))
-            pred_instances, _ = self.box_predictor.unknown_inference(predictions, proposals)
-
-            proposal_res = []
-            import pdb
-            #pdb.set_trace()
-            for i, (instance, targets_per_image, proposal_per_image) in enumerate(zip(pred_instances, targets, proposals)):
-                # 计算预测的instance和真实gt间的iou
-                match_quality_matrix = pairwise_iou(
-                    targets_per_image.gt_boxes, instance.pred_boxes
-                )
-                # print(match_quality_matrix.shape)
-                # print(targets_per_image.gt_classes)
-                if match_quality_matrix.shape[1] == 0 or match_quality_matrix.shape[0] == 0:
-                    continue
-                # matched_vals: pred's max iou with gt
-                # matches: corresponding gt
-                matched_vals, matches = match_quality_matrix.max(dim=0)
-
-                # 选择不相交的作为硬性样本
-                unk_ids = nonzero_tuple((matched_vals <= 0) & (instance.pred_classes <= 80))[0] # instance.pred_classes <= 80 这个条件没什么用
-                
-                if len(unk_ids) == 0:
-                    continue
-
-                # 硬性样本根据预测分数选择topk个
-                if len(unk_ids) > hard_unknown_topk:
-                    cur_samples, index_unk_top1 = torch.topk(instance.scores[unk_ids], hard_unknown_topk)
-                    unk_indices = (instance.ids + sum_prop[i])[unk_ids][index_unk_top1]
-                    unk_indices_per_image = (instance.ids)[unk_ids][index_unk_top1]
-                else:
-                    unk_indices = (instance.ids + sum_prop[i])[unk_ids]
-                    unk_indices_per_image = (instance.ids)[unk_ids]
-                # 转到同一个维度以后，约束energy_logits取0和1有什么好处，之后可以推导
-                # unk_indices = (instance.ids + sum_prop[i])[unk_ids]
-                # ood_samples = torch.cat((ood_samples, input_features[unk_indices]), 0)
-                # if ood_samples == None:
-                #     ood_samples = input_features[unk_indices].detach().view(-1, 2048)
-                # else:
-                #     ood_samples = torch.cat((ood_samples, input_features[unk_indices].detach().view(-1, 2048)), 0)
-
-                proposal_res.append(proposal_per_image.proposal_boxes[unk_indices_per_image])
-            
-            #self.save_ukn_boxes_and_ratio(images_id, proposal_res)
             self.eval_unkown(images_id, targets)
-
-            ################################## end #####################################
-    
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
 
-        
     def forward_with_given_boxes(self, features, instances):
         """
         Use the given boxes in `instances` to produce other (non-box) per-ROI outputs.
@@ -869,6 +796,16 @@ class StandardROIHeads(ROIHeads):
         ret["keypoint_head"] = build_keypoint_head(cfg, shape)
         return ret
 
+    def save_ukn_boxes_and_ratio(
+        self,
+        images: ImageList,
+        proposals: List[Instances],
+    ):
+        import pdb
+        pdb.set_trace()
+
+
+
     def forward(
         self,
         images: ImageList,
@@ -879,11 +816,13 @@ class StandardROIHeads(ROIHeads):
         """
         See :class:`ROIHeads.forward`.
         """
-        del images
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
         del targets
+
+        self.save_ukn_boxes_and_ratio(images, proposals)
+        del images
 
         if self.training:
             losses = self._forward_box(features, proposals)
@@ -1031,29 +970,3 @@ class StandardROIHeads(ROIHeads):
         else:
             features = {f: features[f] for f in self.keypoint_in_features}
         return self.keypoint_head(features, instances)
-
-class GaussianNoise(nn.Module):
-    """Gaussian noise regularizer.
-
-    Args:
-        sigma (float, optional): relative standard deviation used to generate the
-            noise. Relative means that it will be multiplied by the magnitude of
-            the value your are adding the noise to. This means that sigma can be
-            the same regardless of the scale of the vector.
-        is_relative_detach (bool, optional): whether to detach the variable before
-            computing the scale of the noise. If `False` then the scale of the noise
-            won't be seen as a constant but something to optimize: this will bias the
-            network to generate vectors with smaller values.
-    """
-    def __init__(self, sigma=0.1, is_relative_detach=True):
-        super().__init__()
-        self.sigma = sigma
-        self.is_relative_detach = is_relative_detach
-        self.register_buffer('noise', torch.tensor(0))
-
-    def forward(self, x):
-        if self.training and self.sigma != 0:
-            scale = self.sigma * x.detach() if self.is_relative_detach else self.sigma * x
-            sampled_noise = self.noise.expand(*x.size()).float().normal_() * scale
-            x = x + sampled_noise
-        return x

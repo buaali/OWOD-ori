@@ -177,17 +177,15 @@ def inference_on_dataset(model, data_loader, evaluator):
         )
     )
 
-    if not os.path.exists("./output/t2/save_ukn_labels.pth"):
-        logger = logging.getLogger(__name__)
-        logger.info("Going to save the save_ukn_labels files...")
-        torch.save(model.roi_heads.unkown_labels, './output/t2/save_ukn_labels.pth')
-    else:
-        old_d = torch.load("./output/t2/save_ukn_labels.pth")
-        if not old_d and model.roi_heads.unkown_labels:
-            logger = logging.getLogger(__name__)
-            logger.info("Going to save the save_ukn_labels files...")
-            torch.save(model.roi_heads.unkown_labels, './output/t2/save_ukn_labels.pth')
+    # 第一次测试
+    #torch.save(model.roi_heads.d, './output/t1/save_ukn_boxes_and_ratio_final.pth')
+    
+    # 第二次测试
 
+    torch.save(model.roi_heads.unkown_labels, './output/t1/save_ukn_labels_all.pth')
+
+    
+    
     results = evaluator.evaluate()
     # An evaluator may return None when not in main process.
     # Replace it by an empty dict instead to make it easier for downstream code to handle
